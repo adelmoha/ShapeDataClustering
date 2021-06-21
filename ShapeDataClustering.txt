@@ -1,0 +1,191 @@
+#In our paper, “A Comparative Study of Some Clustering Algorithms on Shape Data,” we cluster shape data in some methods and compare the results to achieve the best result for clustering shape data.
+#The methods we examine in this paper are hierarchical (agglomerative and divisive), fuzzy, partial, and an innovative method we called MBSC. In addition, we do these methods on both simulated data and real data (includes 5 data sets). 
+#In this file, we put the codes of all methods to clarify the paper results. Since the codes are similar in all data sets, we just put the results of simulated data.
+
+
+# install packages 
+library(quantmod)
+library(pastecs)
+library(psych)
+library(tseries)
+library(ggplot2)
+library(rugarch)
+library(moments)
+library(car)
+library(fGarch)
+
+# importing dataset of Cyprus stock exchange
+library(readxl)
+Cyprus <- read_excel("Cyprus.xlsx")
+View(Cyprus)
+attach(Cyprus)
+
+# Visualization of dataset
+ggplot(Cyprus, aes(x = Date, y = Close)) +
+  geom_point()
+n = nrow(Cyprus)
+attach(Cyprus)
+n = nrow(Cyprus)
+y = diff(log(Close))
+abslogret=abs(y)
+ind = trunc(seq(1,n,length=5))
+date = c("Jan/02/09","Jan/02/12","Jan/02/15","Jan/02/18","Jan/4/21")
+par(mfrow=c(1,1))
+plot(Close,xlab="Years",ylab="Prices",axes=FALSE,type="l")
+axis(2);axis(1,at=ind,lab=date);box()
+par(mfrow=c(1,1))
+plot(y,xlab="Years",ylab="price return",axes=FALSE,type="l")
+axis(2);axis(1,at=ind,lab=date);box()
+hist(Close)
+qplot(Close, geom="histogram",binwidth = 0.3) + coord_flip()
+
+# Descriptive statistics 
+summary(logret)
+stat.desc(logret,3)
+describe(logret)
+
+# Calculating log return of Close prices
+logret<-diff(log(Cyprus$Close))
+head(logret,3)
+logret<-diff(log(Cyprus$Close))[-1]
+round(head(logret,3),6)
+plot(logret, type="l", col="red", lwd=5, xlab="Date", ylab="log return", main="Return Series")
+
+# ploting absreturn
+plot(abslogret,xlab="Years",ylab="abs price return",axes=FALSE,type="l")
+axis(2);axis(1,at=ind,lab=date);box()
+
+# Testing for Stationarity 
+acf(logret)
+pacf(logret)
+acf(abslogret)
+adf.test(logret)
+
+# Testing for Normality of Close prices
+
+rvec<-as.vector(Cyprus$Close)
+round(skewness(rvec),2)
+round(kurtosis(rvec),2)
+jarque.test(rvec)
+shapiro.test(Cyprus$Close)
+qqPlot(Cyprus$`Close`)
+
+
+# Testing for Normality of return series
+
+rvec<-as.vector(logret)
+round(skewness(rvec),2)
+round(kurtosis(rvec),2)
+jarque.test(rvec)
+shapiro.test(logret)
+qqPlot(logret)
+boxplot(Close,logret)
+
+# GARCH model based on the assumptions of Non-Normality:
+
+# standard GARCH model specification
+uspec1<-ugarchspec(variance.model=list(model="sGARCH",gachOrder=c(1,1)),mean.model=list(armaOrder = c(0,0), include.mean = TRUE),distribution.model = "std")
+
+# Model estimation
+fit.garch1 <-ugarchfit(spec=uspec1,data=logret)
+show(fit.garch1)
+rhat1 <- fit.garch1@fit$fitted.values
+plot.ts(rhat1)
+hhat1 <- ts(fit.garch1@fit$sigma^2)
+plot.ts(hhat1)
+
+# tGARCH model specification 
+uspec2 <- ugarchspec(variance.model=list(model="fGARCH", garchOrder=c(1,1), submodel="TGARCH"), mean.model=list(armaOrder=c(0,0)),distribution.model="std")
+
+# Model estimation
+fit.garch2 <- ugarchfit(spec=uspec2, data=logret)
+show(fit.garch2)
+rhat2 <- fit.garch2@fit$fitted.values
+plot.ts(rhat2)
+hhat2 <- ts(fit.garch2@fit$sigma^2)
+plot.ts(hhat2)
+
+# GARCH-in-mean model specification
+uspec3 <- ugarchspec( variance.model=list(model="fGARCH",garchOrder=c(1,1),submodel="APARCH"), mean.model=list(armaOrder=c(0,0),include.mean=TRUE,archm=TRUE, archpow=2 ), distribution.model="std")
+
+# Model estimation
+
+fit.garch3 <- ugarchfit(spec=uspec3, data=logret)
+show(fit.garch3)
+rhat3 <- fit.garch3@fit$fitted.values
+plot.ts(rhat3)
+hhat3 <- ts(fit.garch3@fit$sigma^2)
+plot.ts(hhat3)
+
+# E-GARCH model specification
+uspec4 <- ugarchspec(variance.model=list(model="eGARCH",garchOrder=c(1,1)), mean.model=list(armaOrder=c(0,0))) 
+
+# Model estimation
+fit.garch4 = ugarchfit(spec=uspec4, data=logret) 
+show(fit.garch4)
+rhat4 <- fit.garch4@fit$fitted.values
+plot.ts(rhat4)
+hhat4 <- ts(fit.garch4@fit$sigma^2)
+plot.ts(hhat4)
+
+# GARCH model based on the assumptions of normality: 
+
+#  GARCH(1,1) model
+fit.garch5 = garchFit(~garch(1,1),data=logret,trace=F,include.mean=F)
+fit.garch5
+summary(fit.garch5)
+fit.garch5@fit$matcoef
+
+### TS-GARCH Model (Lowest AIC - BEST MODEL)
+
+fit.tsgarch6 = garchFit(~garch(1,1),delta=1,data=logret,trace=F,include.mean=F)
+fit.tsgarch6
+summary(fit.tsgarch6)
+fit.tsgarch6@fit$matcoef
+
+# T-GARCH(1,1) for time-varying standard deviation 
+
+fit.tgarch7 = garchFit(~garch(1,1),delta=1,leverage=T,data=logret,trace=F,include.mean=F)
+fit.tgarch7
+summary(fit.tgarch7)
+fit.tgarch7@fit$matcoef
+
+#  AP-GARCH(1,1) model
+
+fit.aparch8 = garchFit(~aparch(1,1),data=logret,trace=F,include.mean=F)
+fit.aparch8
+summary(fit.aparch8)
+fit.aparch8@fit$matcoef
+
+
+# GJR-GARCH model specification
+fit.gjrgarch9 <- garchFit(~garch(1,1),delta=2,leverage=T,data=logret,trace=F,include.mean=F)
+fit.gjrgarch9
+summary(fit.gjrgarch9)
+fit.gjrgarch9@fit$matcoef
+
+# Comparing the estimates of GARCHt:
+
+sigma.t <- cbind(fit.garch5@sigma.t,
+                fit.tsgarch6@sigma.t,
+                fit.tgarch7@sigma.t,
+                fit.aparch8@sigma.t,
+                fit.gjrgarch9@sigma.t)
+limy=range(sigma.t)
+par(mfrow=c(1,1))
+plot(sigma.t[,1],xlab="Days",ylab="Standard deviation",main="",type="l",ylim=limy,axes=FALSE)
+axis(2);box();axis(1,at=ind,lab=date)
+for (i in 2:6)
+  lines(sigma.t[,i],col=i)
+legend("topright",col=1:6,lty=1,
+       legend=c("GARCH5","TS-GARCH6","T-GARCH7","AP-AARCH8","GJR-GARCH9"))
+
+# Forecasting 
+attach(Cyprus)
+uspec3 <- ugarchspec( variance.model=list(model="fGARCH",garchOrder=c(1,1),submodel="APARCH"), mean.model=list(armaOrder=c(0,0),include.mean=TRUE,archm=TRUE, archpow=2 ), distribution.model="std")
+fit = ugarchfit(uspec3, logret)
+bootp <- ugarchboot(fit, method = c("Partial", "Full")[1],
+                     + n.ahead + 500, n.bootpred = 500)
+show(bootp)
+plot(bootp)
+2
